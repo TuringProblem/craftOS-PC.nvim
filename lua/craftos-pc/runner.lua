@@ -34,9 +34,10 @@ local build_cmd = function(opts)
   table.insert(cmd, opts.mount .. "=" .. dir)
 
   -- Run the file as a startup script.
-  local filename = vim.fn.fnamemodify(opts.file, ":t")
+  -- NOTE: --script takes a HOST path, not the CC mount path. The mount above
+  -- still matters so require()/fs inside CC can see sibling files at opts.mount.
   table.insert(cmd, "--script")
-  table.insert(cmd, opts.mount .. "/" .. filename)
+  table.insert(cmd, opts.file)
 
   if opts.renderer == "cli" then
     table.insert(cmd, "--cli")

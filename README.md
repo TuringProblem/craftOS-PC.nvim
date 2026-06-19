@@ -68,6 +68,31 @@ mv CraftOS-PC-*.AppImage ~/.local/bin/craftos
 }
 ```
 
+### Without a plugin manager (native packages)
+
+Neovim's built-in package system needs no dependencies. Clone (or symlink, for
+local development) into a `pack/*/start/` directory:
+
+```sh
+git clone https://github.com/TuringProblem/craftos-pc.nvim \
+  ~/.config/nvim/pack/plugins/start/craftos-pc.nvim
+```
+
+Then call setup from your `init.lua`:
+
+```lua
+require("craftos-pc").setup()
+```
+
+Anything under `pack/*/start/` loads at startup automatically. See `:help packages`.
+
+> **Local development:** symlink your working copy instead of cloning, so edits
+> are live on the next restart:
+> ```sh
+> ln -s ~/Documents/craftos-pc.nvim \
+>   ~/.config/nvim/pack/plugins/start/craftos-pc.nvim
+> ```
+
 ## Usage
 
 1. Open a `.lua` file in your CC:Tweaked project

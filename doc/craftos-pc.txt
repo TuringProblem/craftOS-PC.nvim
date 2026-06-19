@@ -58,6 +58,11 @@ With options: >lua
     terminal = "float",             -- "float" or "split"
     mount    = "/src",              -- CC path for current file's directory
     float    = { width = 0.8, height = 0.8 },
+    keymaps  = {
+      run   = "<leader>cr",         -- :CraftOSRun
+      shell = "<leader>co",         -- :CraftOS
+    },
+    ft_scope = true,                -- keymaps only in lua buffers
   })
 <
 
@@ -103,6 +108,13 @@ Pass a table to |setup()|. All keys are optional.
 
   float~      table    { width: number, height: number } as fraction of editor.
               Default: { width = 0.8, height = 0.8 }
+
+  keymaps~    table    Normal-mode mappings. Set a value to false to disable it.
+                run    -> :CraftOSRun   Default: "<leader>cr"
+                shell  -> :CraftOS      Default: "<leader>co"
+
+  ft_scope~   boolean  If true, keymaps are buffer-local to `lua` files only.
+              If false, they are global. Default: true
 
 ==============================================================================
 6. HEALTH CHECK                                             *craftos-pc-health*

@@ -58,6 +58,11 @@ mv CraftOS-PC-*.AppImage ~/.local/bin/craftos
       terminal = "float",             -- "float" | "split"
       mount    = "/src",              -- CC path for current file's directory
       float    = { width = 0.8, height = 0.8 },
+      keymaps  = {
+        run   = "<leader>cr",         -- :CraftOSRun  (set false to disable)
+        shell = "<leader>co",         -- :CraftOS
+      },
+      ft_scope = true,                -- keymaps only active in lua buffers
     })
   end,
 }

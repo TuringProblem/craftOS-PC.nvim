@@ -59,8 +59,9 @@ With options: >lua
     mount    = "/src",              -- CC path for current file's directory
     float    = { width = 0.8, height = 0.8 },
     keymaps  = {
-      run   = "<leader>cr",         -- :CraftOSRun
-      shell = "<leader>co",         -- :CraftOS
+      run     = "<leader>cr",       -- :CraftOSRun         (single file)
+      program = "<leader>cp",       -- :CraftOSRunProgram  (resolves requires)
+      shell   = "<leader>co",       -- :CraftOS
     },
     ft_scope = true,                -- keymaps only in lua buffers
   })
@@ -75,8 +76,17 @@ After setup, run |:CraftOSSetupDefs| once per project to get autocomplete.
   Open a bare CraftOS-PC shell in a terminal window.
 
 *:CraftOSRun* [renderer]
-  Run the current file in CraftOS-PC. Optional renderer argument overrides
-  config for this run: "cli" (default, interactive) or "headless" (stdout).
+  Run the current file as a single startup script (--script). Fast, good for
+  self-contained files. Relative require()s will NOT resolve in this mode —
+  use :CraftOSRunProgram for multi-file programs. Optional renderer argument:
+  "cli" (default, interactive) or "headless" (stdout).
+
+*:CraftOSRunProgram* [renderer]
+  Run the current file as a CC program: mounts the project root and launches
+  the file through the shell, so relative require("foo.bar") resolves the way
+  a real ComputerCraft program expects. Use this for anything with multiple
+  files. The project root defaults to the file's parent directory; override
+  with config.project_root. Optional renderer argument as above.
 
 *:CraftOSSetupDefs*
   Clone the CC:Tweaked LuaLS definitions (first run only) and write/merge
@@ -106,12 +116,17 @@ Pass a table to |setup()|. All keys are optional.
   defs_path~  string   Path to an existing lua-ls-cc-tweaked checkout.
               Default: auto-managed at stdpath("data")/craftos-pc/defs
 
+  project_root~  string|function   Program root for :CraftOSRunProgram.
+              A string path, or a function(file_path) -> dir.
+              Default: nil (uses the current file's parent directory).
+
   float~      table    { width: number, height: number } as fraction of editor.
               Default: { width = 0.8, height = 0.8 }
 
   keymaps~    table    Normal-mode mappings. Set a value to false to disable it.
-                run    -> :CraftOSRun   Default: "<leader>cr"
-                shell  -> :CraftOS      Default: "<leader>co"
+                run     -> :CraftOSRun         Default: "<leader>cr"
+                program -> :CraftOSRunProgram  Default: "<leader>cp"
+                shell   -> :CraftOS            Default: "<leader>co"
 
   ft_scope~   boolean  If true, keymaps are buffer-local to `lua` files only.
               If false, they are global. Default: true

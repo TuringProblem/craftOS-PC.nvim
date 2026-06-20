@@ -25,27 +25,50 @@ end
 -- Pure: build the argv list for a given run.
 -- opts: { binary: string, file: string, renderer: string, mount: string }
 -- Returns: string[]
-local build_cmd = function(opts)
-  local cmd = { opts.binary }
+-- Append the renderer flag to a command list (mutates cmd).
+local with_renderer = function(cmd, renderer)
+  if renderer == "cli" then
+    table.insert(cmd, "--cli")
+  elseif renderer == "headless" then
+    table.insert(cmd, "--headless")
+  end
+  return cmd
+end
 
-  -- Mount the file's parent directory read-write at the CC mount point.
+-- SCRIPT mode: run a single file before the shell starts.
+-- --script takes a HOST path, not the CC mount path. The mount still matters so
+-- require()/fs can reach sibling files at opts.mount — but package.path is NOT
+-- set up, so relative require("foo.bar") will NOT resolve. Use program mode for that.
+-- opts: { binary, file, renderer, mount }
+local build_script_cmd = function(opts)
+  local cmd = { opts.binary }
   local dir = vim.fn.fnamemodify(opts.file, ":h")
   table.insert(cmd, "--mount-rw")
   table.insert(cmd, opts.mount .. "=" .. dir)
-
-  -- Run the file as a startup script.
-  -- NOTE: --script takes a HOST path, not the CC mount path. The mount above
-  -- still matters so require()/fs inside CC can see sibling files at opts.mount.
   table.insert(cmd, "--script")
   table.insert(cmd, opts.file)
+  return with_renderer(cmd, opts.renderer)
+end
 
-  if opts.renderer == "cli" then
-    table.insert(cmd, "--cli")
-  elseif opts.renderer == "headless" then
-    table.insert(cmd, "--headless")
-  end
+-- PROGRAM mode: mount the project root and launch the file THROUGH the shell.
+-- shell.setDir + shell.run sets package.path to the program's dir, so relative
+-- require("CCZombies.game") resolves — the way real CC programs are run.
+-- opts: { binary, root, entry, renderer, mount } where:
+--   root  = host dir mounted at opts.mount (the program root)
+--   entry = the entry file's path RELATIVE to root (CC-side)
+local build_program_cmd = function(opts)
+  local cmd = { opts.binary }
+  table.insert(cmd, "--mount-rw")
+  table.insert(cmd, opts.mount .. "=" .. opts.root)
 
-  return cmd
+  -- Build the CC-side lua: cd into the mount, run the entry by relative name.
+  -- Single-quote the entry; CC paths never contain single quotes in practice.
+  local cc_entry = opts.mount .. "/" .. opts.entry
+  local lua = string.format("shell.setDir('%s'); shell.run('%s')", opts.mount, cc_entry)
+  table.insert(cmd, "--exec")
+  table.insert(cmd, lua)
+
+  return with_renderer(cmd, opts.renderer)
 end
 
 -- Imperative shell: open a floating terminal window.
@@ -108,11 +131,8 @@ local open_split = function(cmd)
   vim.cmd("startinsert")
 end
 
--- Run the current buffer's file in CraftOS-PC.
--- renderer_override: "cli" | "headless" | nil (uses config default)
-M.run = function(renderer_override)
-  local config = require("craftos-pc").config
-
+-- Resolve the binary or notify + return nil.
+local resolve_binary = function(config)
   local binary = config.binary or M.detect_binary()
   if not binary then
     vim.notify(
@@ -120,23 +140,12 @@ M.run = function(renderer_override)
         .. "Run :checkhealth craftos-pc for details.",
       vim.log.levels.ERROR
     )
-    return
   end
+  return binary
+end
 
-  local file = vim.api.nvim_buf_get_name(0)
-  if file == "" then
-    vim.notify("[craftos-pc] Buffer has no file path. Save the file first.", vim.log.levels.ERROR)
-    return
-  end
-
-  local renderer = renderer_override or config.renderer
-  local cmd = build_cmd({
-    binary   = binary,
-    file     = file,
-    renderer = renderer,
-    mount    = config.mount,
-  })
-
+-- Open the built command in the configured terminal presentation.
+local launch = function(cmd, config)
   if config.terminal == "float" then
     open_float(cmd, config.float)
   else
@@ -144,26 +153,78 @@ M.run = function(renderer_override)
   end
 end
 
--- Open a bare CraftOS-PC shell (no file loaded).
-M.shell = function()
+-- SCRIPT mode: run the current buffer's file as a single startup script.
+-- Fast for self-contained files; relative require() will NOT resolve (use run_program).
+-- renderer_override: "cli" | "headless" | nil (uses config default)
+M.run = function(renderer_override)
   local config = require("craftos-pc").config
+  local binary = resolve_binary(config)
+  if not binary then return end
 
-  local binary = config.binary or M.detect_binary()
-  if not binary then
-    vim.notify(
-      "[craftos-pc] CraftOS-PC binary not found. Run :checkhealth craftos-pc for details.",
-      vim.log.levels.ERROR
-    )
+  local file = vim.api.nvim_buf_get_name(0)
+  if file == "" then
+    vim.notify("[craftos-pc] Buffer has no file path. Save the file first.", vim.log.levels.ERROR)
     return
   end
 
-  local cmd = { binary, "--cli" }
+  launch(build_script_cmd({
+    binary   = binary,
+    file     = file,
+    renderer = renderer_override or config.renderer,
+    mount    = config.mount,
+  }), config)
+end
 
-  if config.terminal == "float" then
-    open_float(cmd, config.float)
-  else
-    open_split(cmd)
+-- PROGRAM mode: mount a project root and launch the entry file through the shell,
+-- so relative require()s resolve like a real CC program. The root defaults to the
+-- current file's parent directory; override with config.project_root (a function
+-- (file) -> dir, or a string path).
+-- renderer_override: "cli" | "headless" | nil
+M.run_program = function(renderer_override)
+  local config = require("craftos-pc").config
+  local binary = resolve_binary(config)
+  if not binary then return end
+
+  local file = vim.api.nvim_buf_get_name(0)
+  if file == "" then
+    vim.notify("[craftos-pc] Buffer has no file path. Save the file first.", vim.log.levels.ERROR)
+    return
   end
+
+  -- Determine the program root.
+  local root
+  local pr = config.project_root
+  if type(pr) == "function" then
+    root = pr(file)
+  elseif type(pr) == "string" then
+    root = pr
+  else
+    root = vim.fn.fnamemodify(file, ":h")
+  end
+  root = vim.fn.fnamemodify(root, ":p"):gsub("/$", "")
+
+  -- Entry path relative to root (forward slashes for CC).
+  local entry = vim.fn.fnamemodify(file, ":p"):sub(#root + 2)
+  if entry == "" then
+    vim.notify("[craftos-pc] Current file is not under the project root.", vim.log.levels.ERROR)
+    return
+  end
+
+  launch(build_program_cmd({
+    binary   = binary,
+    root     = root,
+    entry    = entry,
+    renderer = renderer_override or config.renderer,
+    mount    = config.mount,
+  }), config)
+end
+
+-- Open a bare CraftOS-PC shell (no file loaded).
+M.shell = function()
+  local config = require("craftos-pc").config
+  local binary = resolve_binary(config)
+  if not binary then return end
+  launch({ binary, "--cli" }, config)
 end
 
 return M

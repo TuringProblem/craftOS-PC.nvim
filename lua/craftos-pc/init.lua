@@ -13,6 +13,9 @@ local defaults = {
   mount = "/src",
   -- Path to CC:Tweaked LuaLS defs. Auto-managed (cloned to stdpath data) if nil.
   defs_path = nil,
+  -- Program root for :CraftOSRunProgram. nil = the current file's parent dir.
+  -- May be a string path, or a function (file_path) -> dir for custom detection.
+  project_root = nil,
   -- Float window dimensions as fraction of editor
   float = {
     width = 0.8,
@@ -21,8 +24,9 @@ local defaults = {
   -- Keymaps. Set any value to false to disable that mapping.
   -- Mapped buffer-local on Lua files only (see ft_scope).
   keymaps = {
-    run   = "<leader>cr", -- :CraftOSRun
-    shell = "<leader>co", -- :CraftOS
+    run     = "<leader>cr", -- :CraftOSRun         (single file, fast)
+    program = "<leader>cp", -- :CraftOSRunProgram  (resolves requires)
+    shell   = "<leader>co", -- :CraftOS
   },
   -- If true, keymaps apply only in `lua` buffers via a FileType autocmd.
   -- If false, they're set globally at setup() time.
@@ -43,6 +47,12 @@ local set_maps = function(config, buf)
     vim.keymap.set("n", km.run, function()
       require("craftos-pc.runner").run()
     end, vim.tbl_extend("force", opts, { desc = "CraftOS: run current file" }))
+  end
+
+  if km.program then
+    vim.keymap.set("n", km.program, function()
+      require("craftos-pc.runner").run_program()
+    end, vim.tbl_extend("force", opts, { desc = "CraftOS: run current file as program" }))
   end
 
   if km.shell then

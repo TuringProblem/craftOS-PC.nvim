@@ -27,6 +27,17 @@ end, {
   desc     = "Run current file in CraftOS-PC",
 })
 
+--- :CraftOSRunProgram [cli|headless] — run current file as a CC program (through
+--- the shell, so relative require()s resolve). Mounts the project root.
+vim.api.nvim_create_user_command("CraftOSRunProgram", function(opts)
+  local renderer = opts.args ~= "" and opts.args or nil
+  require("craftos-pc.runner").run_program(renderer)
+end, {
+  nargs    = "?",
+  complete = function() return { "cli", "headless" } end,
+  desc     = "Run current file as a CC program (resolves requires)",
+})
+
 --- :CraftOSSetupDefs — clone defs + write .luarc.json for current project
 vim.api.nvim_create_user_command("CraftOSSetupDefs", function()
   require("craftos-pc.defs").inject_luarc(vim.fn.getcwd())
